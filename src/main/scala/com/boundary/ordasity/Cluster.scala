@@ -67,6 +67,7 @@ class Cluster(val name: String, val listener: Listener, config: ClusterConfig)
   val claimedForHandoff = new NonBlockingHashSet[String]
   var loadMap : Map[String, Double] = null
   val workUnitsPeggedToMe = new NonBlockingHashSet[String]
+  val claimer = new Claimer(this)
 
   var balancingPolicy = (config.useSmartBalancing, config.useSmartGaugedBalancing) match {
     case (false, false) => new CountBalancingPolicy(this, config).init()
@@ -190,6 +191,7 @@ class Cluster(val name: String, val listener: Listener, config: ClusterConfig)
    */
   def connect(injectedClient: Option[ZooKeeperClient] = None) {
     if (!initialized.get) {
+      claimer.start()
       zk = injectedClient match {
         case Some(zk) =>
           log.info("Using user-supplied ZooKeeper")
@@ -287,7 +289,7 @@ class Cluster(val name: String, val listener: Listener, config: ClusterConfig)
     initialized.set(true)
     
     setState(NodeState.Started)
-    claimWork()
+    claimer.requestClaim()
     verifyIntegrity()
 
     balancingPolicy.onConnect()
